@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subway Exchange — Purchase Test</title><style>body{font:16px system-ui;max-width:640px;margin:40px auto;padding:0 20px}button{font:inherit;padding:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eee;padding:16px}</style></head><body><h1>Test Prediction Purchase</h1><p>Development only. Reuses the existing guest session. Fixed 100 Token test purchase; repeat requests use the same key.</p><button id="run" disabled>Run purchase test</button><pre id="out">Loading…</pre><script type="module">
+import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const url='https://jxymdjkzbjntfbbyjdfa.supabase.co',key='sb_publishable_DA9X9DoNOhoBYFMdVGh7JQ_Rzk_xRPI';
+const client=createClient(url,key,{auth:{storageKey:'subway-exchange-dev-auth-test',persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+const run=document.querySelector('#run'),out=document.querySelector('#out');
+const check=r=>{if(r.error)throw r.error;return r.data;};
+const args={p_request_key:'dev-purchase-test-e8af1e93-v1',p_quote:'e8af1e93-5f23-431c-bb6b-34632be6ec13',p_stake_minor:10000};
+run.onclick=async()=>{run.disabled=true;out.textContent='Testing…';try{
+const {session}=check(await client.auth.getSession());if(!session)throw Error('No existing guest session. Do not create a new guest; return to the original test website and browser.');
+const profile=async()=>{const p=check(await client.rpc('get_my_player'));if(p?.length!==1||p[0].player_id!=='e4b23cf0-13f4-43e4-9495-9a76ecf2a148')throw Error('Wrong test player. No purchase attempted.');return Number(p[0].available_minor);};
+const before=await profile();if(![100000,90000].includes(before))throw Error('Unexpected starting balance: '+before/100);
+const unsigned=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'subway-unsigned-purchase-test'}});
+const denied=await unsigned.rpc('purchase_my_prediction',args);if(!denied.error||!(denied.error.code==='42501'||denied.status===401||denied.status===403))throw Error('Unauthenticated rejection not verified');
+const first=check(await client.rpc('purchase_my_prediction',args));const after=await profile();const retry=check(await client.rpc('purchase_my_prediction',args));const final=await profile();if(!first||first!==retry||after!==90000||final!==after)throw Error('Purchase or idempotency mismatch: '+JSON.stringify({first,retry,before,after,final}));
+out.textContent='PASS: authenticated purchase and duplicate retry\nTicket ID: '+first+'\nStarting balance: '+before/100+' T\nAfter purchase: '+after/100+' T\nAfter retry: '+final/100+' T\nSame ticket ID: yes\nUnauthenticated purchase: denied';
+}catch(e){out.textContent='FAIL: '+(e.message||String(e));}finally{run.disabled=false;}};
+run.disabled=false;out.textContent='Ready. Reuse your existing guest session.';
+</script></body></html>
